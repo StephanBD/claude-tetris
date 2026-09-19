@@ -389,7 +389,7 @@ document.addEventListener('keydown', e => {
 restartBtn.addEventListener('click', init);
 themeToggleBtn.addEventListener('click', toggleTheme);
 muteBtn.addEventListener('click', () => { Audio_.toggleMute(); updateMuteButton(); });
-if (modeSelect) modeSelect.addEventListener('change', init);
+if (modeSelect) modeSelect.addEventListener('change', () => { init(); modeSelect.blur(); });
 
 infoToggleBtn.addEventListener('click', e => {
   e.stopPropagation();
