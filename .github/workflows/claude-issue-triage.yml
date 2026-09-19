@@ -1,0 +1,123 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    if: |
+      github.event.issue.pull_request == null &&
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.issue.labels.*.name, 'skip-triage')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Issue Triage
+        id: claude-triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --allowedTools "Read,Glob,Grep,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh api:*),Bash(gh label list:*)"
+          prompt: |
+            Eres el triage automático de issues del repo ${{ github.repository }}, un juego de
+            Tetris en JavaScript vanilla (ver CLAUDE.md para la arquitectura). Tu trabajo es
+            clasificar y diagnosticar el issue #${{ github.event.issue.number }}: asignarle
+            labels y dejar un comentario de diagnóstico que sirva después para implementar la
+            solución sin tener que volver a investigar.
+
+            ## Paso 1: leer contexto
+            1. Lee el issue completo: `gh issue view ${{ github.event.issue.number }} --json title,body,labels,comments`
+            2. Lee `CLAUDE.md` para entender la arquitectura del juego.
+            3. Lee `game.js` (y `index.html`/`style.css` si aplica) enfocándote en las
+               funciones/partes relevantes para este issue.
+            4. Lee `.github/labels.yml`: es la ÚNICA lista de labels que puedes usar. No
+               inventes labels nuevos ni uses ninguno que no esté en ese archivo.
+
+            ## Paso 2: clasificar
+            Elige:
+            - Exactamente un label `type:*` (bug, feature, enhancement, docs, question, chore).
+            - Uno o varios labels `area:*` según qué funciones/archivos toca el issue
+              (gameplay, rendering, input, scoring, collision, ui, ci).
+            - Exactamente un label `priority:*` (critical, high, medium, low).
+            - Exactamente un label `complexity:*` (trivial, small, medium, large), estimando
+              el esfuerzo de implementar la solución.
+            - Si el issue no trae información suficiente para diagnosticar con confianza
+              (falta repro, falta contexto, es ambiguo), añade también `needs-info`.
+
+            Aplica los labels elegidos con:
+            `gh issue edit ${{ github.event.issue.number }} --add-label "type:x,area:y,priority:z,complexity:w"`
+            No quites labels que ya estén puestos (pueden ser de un humano), salvo que sean
+            labels de esta misma taxonomía que ya no apliquen tras una edición del issue — en
+            ese caso usa `--remove-label` para dejar sólo una clasificación vigente por
+            dimensión (un solo `type:*`, un solo `priority:*`, un solo `complexity:*`).
+
+            ## Paso 3: escribir el diagnóstico (idempotente)
+            Este workflow corre tanto en `opened` como en `edited`, así que el comentario de
+            diagnóstico NO debe duplicarse: debe haber siempre uno solo por issue.
+
+            1. Lista los comentarios existentes: `gh issue view ${{ github.event.issue.number }} --json comments`
+            2. Busca uno cuyo cuerpo empiece por `<!-- claude-triage -->`.
+            3. Si existe, actualízalo con:
+               `gh api --method PATCH repos/${{ github.repository }}/issues/comments/<id> -f body=@archivo.md`
+            4. Si no existe, créalo con:
+               `gh issue comment ${{ github.event.issue.number }} --body-file archivo.md`
+
+            El comentario debe seguir EXACTAMENTE esta plantilla (usa Markdown, referencias de
+            código en formato `game.js:120`, y sé concreto — nada de relleno genérico):
+
+            ```
+            <!-- claude-triage -->
+            ## 🔎 Diagnóstico automático
+
+            **Clasificación:** `type:...` · `area:...` · `priority:...` · `complexity:...`
+
+            ### Resumen
+            (1-2 frases: qué se pide o reporta)
+
+            ### Comportamiento esperado vs. actual
+            (sólo si es type:bug; si no aplica, omite esta sección)
+
+            ### Análisis del código
+            (funciones y líneas concretas de game.js/index.html/style.css implicadas)
+
+            ### Causa probable
+            (hipótesis concreta basada en el código leído, no genérica)
+
+            ### Propuesta de solución
+            (pasos numerados, concretos, listos para implementar)
+
+            ### Criterios de aceptación
+            - [ ] ...
+            - [ ] ...
+
+            ### Riesgos / efectos colaterales
+            (qué otra parte del juego puede verse afectada por este cambio)
+
+            ### Información que falta
+            (sólo si aplicaste needs-info; si no, omite esta sección)
+
+            ---
+            🤖 Generado por Claude · se actualiza automáticamente al editar el issue
+            ```
+
+            Sé preciso y útil: este diagnóstico se va a usar directamente para escribir el
+            código de la solución después, así que la sección "Propuesta de solución" debe ser
+            accionable de verdad, no un resumen vago.

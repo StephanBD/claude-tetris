@@ -1,0 +1,46 @@
+name: "🐛 Reporte de bug"
+description: "Algo en el juego no funciona como debería"
+labels: []
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: "¿Qué pasó?"
+      description: "Describe el problema con la mayor claridad posible."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Pasos para reproducirlo"
+      description: "Enumera los pasos exactos, incluyendo teclas presionadas."
+      placeholder: |
+        1. Abrir el juego
+        2. Presionar flecha izquierda varias veces hasta pegar la pieza a la pared
+        3. Presionar X para rotar
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Comportamiento esperado"
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: "Navegador y sistema operativo"
+      placeholder: "Chrome 129 en Windows 11"
+    validations:
+      required: false
+
+  - type: input
+    id: state
+    attributes:
+      label: "Nivel / score / pieza en el momento del fallo (si aplica)"
+    validations:
+      required: false

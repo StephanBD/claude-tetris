@@ -1,0 +1,25 @@
+name: "✨ Solicitud de feature"
+description: "Proponer una funcionalidad o mejora nueva"
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "¿Qué problema resuelve o qué mejora?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Comportamiento propuesto"
+      description: "Cómo debería funcionar la nueva feature."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternativas consideradas"
+    validations:
+      required: false
