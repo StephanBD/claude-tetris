@@ -81,7 +81,10 @@ jobs:
                `gh issue comment ${{ github.event.issue.number }} --body-file archivo.md`
 
             El comentario debe seguir EXACTAMENTE esta plantilla (usa Markdown, referencias de
-            código en formato `game.js:120`, y sé concreto — nada de relleno genérico):
+            código en formato `game.js:120`, y sé concreto — nada de relleno genérico). El
+            cuerpo del comentario debe estar en formato Markdown válido que GitHub pueda
+            renderizar correctamente (encabezados, listas, checkboxes, bloques de código con
+            triple backtick, etc. — sin HTML crudo salvo el propio marcador de comentario):
 
             ```
             <!-- claude-triage -->
