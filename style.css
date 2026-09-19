@@ -19,6 +19,9 @@
   --restart-bg-hover: #9bbdff;
   --restart-text: #0f0f17;
   --grid-color: #22222e;
+  --energy-bg: #22223a;
+  --energy-fill: #ffd54f;
+  --select-bg: #22223a;
 }
 
 [data-theme="light"] {
@@ -42,6 +45,9 @@
   --restart-bg-hover: #5a7bd8;
   --restart-text: #ffffff;
   --grid-color: #d8d8e4;
+  --energy-bg: #e4e4ee;
+  --energy-fill: #3b5ec4;
+  --select-bg: #ffffff;
 }
 
 *, *::before, *::after {
@@ -83,7 +89,8 @@ body {
   text-shadow: 0 0 20px var(--title-shadow);
 }
 
-#theme-toggle {
+#theme-toggle,
+#mute-toggle {
   background: var(--kbd-bg);
   border: 1px solid var(--kbd-border);
   border-radius: 6px;
@@ -91,6 +98,10 @@ body {
   font-size: 16px;
   cursor: pointer;
   line-height: 1;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .game-container {
@@ -137,11 +148,42 @@ body {
   letter-spacing: 1px;
 }
 
-#next-canvas {
+#next-canvas,
+#hold-canvas {
   display: block;
   border: 1px solid var(--board-border);
   background: var(--board-bg);
   border-radius: 4px;
+  transition: opacity 0.15s;
+}
+
+#hold-canvas.locked {
+  opacity: 0.35;
+}
+
+.energy {
+  width: 100%;
+  height: 10px;
+  background: var(--energy-bg);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+#energy-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--energy-fill);
+  transition: width 0.2s;
+}
+
+#mode-select {
+  background: var(--select-bg);
+  color: var(--text);
+  border: 1px solid var(--kbd-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /* ---- Controles ---- */

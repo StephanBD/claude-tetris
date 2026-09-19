@@ -1,50 +1,34 @@
 'use strict';
 
-const COLS = 10;
-const ROWS = 20;
-const BLOCK = 30;
-
-const COLORS = [
-  null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#64b5f6', // J - blue
-  '#ffb74d', // L - orange
-];
-
-const PIECES = [
-  null,
-  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
-  [[2,2],[2,2]],                               // O
-  [[0,3,0],[3,3,3],[0,0,0]],                  // T
-  [[0,4,4],[4,4,0],[0,0,0]],                  // S
-  [[5,5,0],[0,5,5],[0,0,0]],                  // Z
-  [[6,0,0],[6,6,6],[0,0,0]],                  // J
-  [[0,0,7],[7,7,7],[0,0,0]],                  // L
-];
-
-const LINE_SCORES = [0, 100, 300, 500, 800];
-
-const GRID_COLORS = { dark: '#22222e', light: '#d8d8e4' };
-const THEME_STORAGE_KEY = 'tetris-theme';
+// Estado global del tablero y de la partida. Las constantes (COLS, ROWS,
+// PIECES, COLORS...) viven en config.js; el resto de módulos (board.js,
+// pieces.js, scoring.js, powerups.js, abilities.js, modes.js) leen y escriben
+// estas variables directamente, sin módulos ES, como scripts clásicos.
 const themeToggleBtn = document.getElementById('theme-toggle');
+const muteBtn = document.getElementById('mute-toggle');
+const modeSelect = document.getElementById('mode-select');
 
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next-canvas');
 const nextCtx = nextCanvas.getContext('2d');
+const holdCanvas = document.getElementById('hold-canvas');
+const holdCtx = holdCanvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const linesEl = document.getElementById('lines');
 const levelEl = document.getElementById('level');
+const comboSection = document.getElementById('combo-section');
+const comboEl = document.getElementById('combo');
+const timerSection = document.getElementById('timer-section');
+const timerEl = document.getElementById('timer');
+const energyFillEl = document.getElementById('energy-fill');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let board, current, queue, hold, holdUsed;
+let score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
 let currentTheme = 'dark';
 
 function applyTheme(theme) {
@@ -63,74 +47,8 @@ function toggleTheme() {
   applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
 }
 
-function createBoard() {
-  return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
-}
-
-function randomPiece() {
-  const type = Math.floor(Math.random() * 7) + 1;
-  const shape = PIECES[type].map(row => [...row]);
-  return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0 };
-}
-
-function collide(shape, ox, oy) {
-  for (let r = 0; r < shape.length; r++) {
-    for (let c = 0; c < shape[r].length; c++) {
-      if (!shape[r][c]) continue;
-      const nx = ox + c;
-      const ny = oy + r;
-      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
-      if (ny >= 0 && board[ny][nx]) return true;
-    }
-  }
-  return false;
-}
-
-function rotateCW(shape) {
-  const rows = shape.length, cols = shape[0].length;
-  const result = Array.from({ length: cols }, () => new Array(rows).fill(0));
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++)
-      result[c][rows - 1 - r] = shape[r][c];
-  return result;
-}
-
-function tryRotate() {
-  const rotated = rotateCW(current.shape);
-  const kicks = [0, -1, 1, -2, 2];
-  for (const kick of kicks) {
-    if (!collide(rotated, current.x + kick, current.y)) {
-      current.shape = rotated;
-      current.x += kick;
-      return;
-    }
-  }
-}
-
-function merge() {
-  for (let r = 0; r < current.shape.length; r++)
-    for (let c = 0; c < current.shape[r].length; c++)
-      if (current.shape[r][c])
-        board[current.y + r][current.x + c] = current.shape[r][c];
-}
-
-function clearLines() {
-  let cleared = 0;
-  for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r].every(v => v !== 0)) {
-      board.splice(r, 1);
-      board.unshift(new Array(COLS).fill(0));
-      cleared++;
-      r++;
-    }
-  }
-  if (cleared) {
-    lines += cleared;
-    score += (LINE_SCORES[cleared] || 0) * level;
-    level = Math.floor(lines / 10) + 1;
-    dropInterval = Math.max(100, 1000 - (level - 1) * 90);
-    updateHUD();
-  }
+function updateMuteButton() {
+  muteBtn.textContent = Audio_.isMuted() ? '🔇' : '🔊';
 }
 
 function ghostY() {
@@ -149,6 +67,7 @@ function hardDrop() {
 function softDrop() {
   if (!collide(current.shape, current.x, current.y + 1)) {
     current.y++;
+    lastMoveWasRotation = false;
     score += 1;
     updateHUD();
   } else {
@@ -156,37 +75,121 @@ function softDrop() {
   }
 }
 
+function tryRotate() {
+  const rotate = shouldRotateReversed() ? rotateCCW : rotateCW;
+  const rotated = rotate(current.shape);
+  const kicks = [0, -1, 1, -2, 2, -3, 3];
+  for (const kick of kicks) {
+    if (!collide(rotated, current.x + kick, current.y)) {
+      current.shape = rotated;
+      current.x += kick;
+      lastMoveWasRotation = true;
+      sfx('rotate');
+      return;
+    }
+  }
+}
+
 function lockPiece() {
+  takeSnapshot();
   merge();
-  clearLines();
+  applyPower(current);
+  const tspin = detectTSpin(current);
+  const cleared = clearLines();
+  registerLock(cleared, tspin);
+  gainEnergy(cleared * ABILITY_ENERGY_PER_LINE);
+  notifyLinesForPowerup(cleared);
+  notifyModeLock();
+  holdUsed = false;
+  sfx('lock');
   spawn();
 }
 
 function spawn() {
-  current = next;
-  next = randomPiece();
+  current = queue.shift();
+  refillQueue();
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
-  drawNext();
+  drawNextPanel();
+}
+
+function doHold() {
+  if (holdUsed || gameOver || paused) return;
+  sfx('hold');
+  if (!hold) {
+    hold = { ...current };
+    current = queue.shift();
+    refillQueue();
+  } else {
+    const swap = hold;
+    hold = { type: current.type, shape: current.shape, x: current.x, y: current.y, power: current.power };
+    current = swap;
+  }
+  resetPiecePosition(current);
+  lastMoveWasRotation = false;
+  holdUsed = true;
+  if (collide(current.shape, current.x, current.y)) {
+    endGame();
+  }
+  drawHoldPanel();
 }
 
 function updateHUD() {
   scoreEl.textContent = score.toLocaleString();
   linesEl.textContent = lines;
   levelEl.textContent = level;
+  if (combo > 0) {
+    comboSection.classList.remove('hidden');
+    comboEl.textContent = `x${combo}`;
+  } else {
+    comboSection.classList.add('hidden');
+  }
 }
 
-function drawBlock(context, x, y, colorIndex, size, alpha) {
+function updateTimerHUD() {
+  if (activeModeId === 'sprint40') {
+    timerSection.classList.remove('hidden');
+    timerEl.textContent = `${(sprintElapsed / 1000).toFixed(1)}s`;
+  } else {
+    timerSection.classList.add('hidden');
+  }
+}
+
+// ---- Dibujo ----
+
+function paintCell(context, px, py, colorIndex, size, alpha, glyph) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
+  context.fillStyle = COLORS[colorIndex];
+  context.fillRect(px + 1, py + 1, size - 2, size - 2);
   context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  context.fillRect(px + 1, py + 1, size - 2, 4);
+  if (glyph) {
+    context.fillStyle = '#fff';
+    context.font = `${Math.floor(size * 0.6)}px system-ui, sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(glyph, px + size / 2, py + size / 2 + 1);
+  }
   context.globalAlpha = 1;
+}
+
+function drawBlock(context, x, y, colorIndex, size, alpha, glyph) {
+  paintCell(context, x * size, y * size, colorIndex, size, alpha, glyph);
+}
+
+// Preview genérico centrado en un canvas cuadrado (hold, next, cola completa).
+function drawPiecePreview(context, targetCanvas, shape, alpha) {
+  context.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+  if (!shape) return;
+  const dim = Math.max(4, shape.length, shape[0].length);
+  const cell = targetCanvas.width / dim;
+  const offX = (dim - shape[0].length) / 2;
+  const offY = (dim - shape.length) / 2;
+  for (let r = 0; r < shape.length; r++)
+    for (let c = 0; c < shape[r].length; c++)
+      if (shape[r][c]) paintCell(context, (offX + c) * cell, (offY + r) * cell, shape[r][c], cell, alpha);
 }
 
 function drawGrid() {
@@ -210,10 +213,11 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
-  // board
+  // tablero (oculto en modo "piezas invisibles" salvo el destello tras bloquear)
+  const showLocked = !hideLocked || revealTimer > 0;
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
-      drawBlock(ctx, c, r, board[r][c], BLOCK);
+      if (showLocked) drawBlock(ctx, c, r, board[r][c], BLOCK);
 
   // ghost
   const gy = ghostY();
@@ -222,21 +226,39 @@ function draw() {
       if (current.shape[r][c])
         drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, 0.2);
 
-  // current piece
+  // pieza actual (con glifo de power-up si lleva uno)
+  const glyph = current.power ? POWER_GLYPHS[current.power] : null;
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
-      drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK);
+      if (current.shape[r][c])
+        drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK, 1, glyph);
+
+  drawFx(ctx);
 }
 
-function drawNext() {
-  const NB = 30;
+function drawNextPanel() {
+  if (!showFullQueue) {
+    drawPiecePreview(nextCtx, nextCanvas, queue[0].shape);
+    return;
+  }
   nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-  const shape = next.shape;
-  const offX = Math.floor((4 - shape[0].length) / 2);
-  const offY = Math.floor((4 - shape.length) / 2);
-  for (let r = 0; r < shape.length; r++)
-    for (let c = 0; c < shape[r].length; c++)
-      drawBlock(nextCtx, offX + c, offY + r, shape[r][c], NB);
+  const count = Math.min(5, queue.length);
+  const rowH = nextCanvas.height / count;
+  for (let i = 0; i < count; i++) {
+    const shape = queue[i].shape;
+    const dim = Math.max(shape.length, shape[0].length);
+    const cell = Math.min(rowH / dim, nextCanvas.width / dim);
+    const offX = (nextCanvas.width - shape[0].length * cell) / 2;
+    const offY = i * rowH + (rowH - shape.length * cell) / 2;
+    for (let r = 0; r < shape.length; r++)
+      for (let c = 0; c < shape[r].length; c++)
+        if (shape[r][c]) paintCell(nextCtx, offX + c * cell, offY + r * cell, shape[r][c], cell);
+  }
+}
+
+function drawHoldPanel() {
+  drawPiecePreview(holdCtx, holdCanvas, hold ? hold.shape : null);
+  holdCanvas.classList.toggle('locked', holdUsed && !!hold);
 }
 
 function endGame() {
@@ -245,10 +267,11 @@ function endGame() {
   overlayTitle.textContent = 'GAME OVER';
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
   overlay.classList.remove('hidden');
+  sfx('gameover');
 }
 
 function togglePause() {
-  if (gameOver) return;
+  if (gameOver || abilityMenuOpen) return;
   paused = !paused;
   if (!paused) {
     lastTime = performance.now();
@@ -264,21 +287,35 @@ function togglePause() {
 function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
-  if (dropAccum >= dropInterval) {
-    dropAccum = 0;
-    if (!collide(current.shape, current.x, current.y + 1)) {
-      current.y++;
-    } else {
-      lockPiece();
-      if (gameOver) return;
+
+  updateFx(dt);
+  updatePowerups(dt);
+  updateAbilityTimers(dt);
+  tickMode(dt);
+  updateTimerHUD();
+  if (gameOver) return; // tickMode pudo terminar la partida (sprint / basura)
+
+  if (freezeTimer <= 0) {
+    const effectiveInterval = slowTimer > 0 ? dropInterval * 2.5 : dropInterval;
+    dropAccum += dt;
+    if (dropAccum >= effectiveInterval) {
+      dropAccum = 0;
+      if (!collide(current.shape, current.x, current.y + 1)) {
+        current.y++;
+        lastMoveWasRotation = false;
+      } else {
+        lockPiece();
+        if (gameOver) return;
+      }
     }
   }
+
   draw();
   animId = requestAnimationFrame(loop);
 }
 
 function init() {
+  activeModeId = modeSelect ? modeSelect.value : 'marathon';
   board = createBoard();
   score = 0;
   lines = 0;
@@ -288,23 +325,41 @@ function init() {
   dropInterval = 1000;
   dropAccum = 0;
   lastTime = performance.now();
-  next = randomPiece();
+  hold = null;
+  holdUsed = false;
+
+  resetFx();
+  resetScoring();
+  resetPowerups();
+  resetAbilities();
+  setupMode(); // puede sembrar bloques (modo "preset") antes de generar piezas
+
+  queue = createQueue();
   spawn();
   updateHUD();
+  updateTimerHUD();
+  drawHoldPanel();
   overlay.classList.add('hidden');
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener('keydown', e => {
+  if (abilityMenuOpen) {
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)) {
+      chooseAbility(e.code.slice(-1));
+    }
+    return;
+  }
   if (e.code === 'KeyP') { togglePause(); return; }
+  if (e.code === 'KeyM') { Audio_.toggleMute(); updateMuteButton(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
     case 'ArrowLeft':
-      if (!collide(current.shape, current.x - 1, current.y)) current.x--;
+      if (!collide(current.shape, current.x - 1, current.y)) { current.x--; lastMoveWasRotation = false; sfx('move'); }
       break;
     case 'ArrowRight':
-      if (!collide(current.shape, current.x + 1, current.y)) current.x++;
+      if (!collide(current.shape, current.x + 1, current.y)) { current.x++; lastMoveWasRotation = false; sfx('move'); }
       break;
     case 'ArrowDown':
       softDrop();
@@ -317,12 +372,23 @@ document.addEventListener('keydown', e => {
       e.preventDefault();
       hardDrop();
       break;
+    case 'KeyC':
+    case 'ShiftLeft':
+    case 'ShiftRight':
+      doHold();
+      break;
+    case 'KeyE':
+      openAbilityMenu();
+      break;
   }
   updateHUD();
 });
 
 restartBtn.addEventListener('click', init);
 themeToggleBtn.addEventListener('click', toggleTheme);
+muteBtn.addEventListener('click', () => { Audio_.toggleMute(); updateMuteButton(); });
+if (modeSelect) modeSelect.addEventListener('change', init);
 
 initTheme();
+updateMuteButton();
 init();

@@ -10,6 +10,7 @@
   <div class="wrapper">
     <div class="title-row">
       <h1 class="game-title">TETRIS</h1>
+      <button id="mute-toggle" aria-label="Silenciar sonido" title="Silenciar/activar sonido">🔊</button>
       <button id="theme-toggle" aria-label="Cambiar tema" title="Cambiar tema claro/oscuro">🌙</button>
     </div>
     <div class="game-container">
@@ -28,10 +29,40 @@
           <span class="label">LEVEL</span>
           <span class="value" id="level">1</span>
         </div>
+        <div class="panel-section hidden" id="combo-section">
+          <span class="label">COMBO</span>
+          <span class="value" id="combo">x0</span>
+        </div>
+        <div class="panel-section hidden" id="timer-section">
+          <span class="label">TIME</span>
+          <span class="value" id="timer">0.0s</span>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">ENERGY</span>
+          <div class="energy"><div id="energy-fill"></div></div>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">HOLD</span>
+          <canvas id="hold-canvas" width="120" height="120"></canvas>
+        </div>
 
         <div class="panel-section">
           <span class="label">NEXT</span>
           <canvas id="next-canvas" width="120" height="120"></canvas>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">MODO</span>
+          <select id="mode-select">
+            <option value="marathon">Maratón</option>
+            <option value="sprint40">Sprint 40 líneas</option>
+            <option value="garbage">Basura ascendente</option>
+            <option value="preset">Bloques pre-colocados</option>
+            <option value="invisible">Piezas invisibles</option>
+            <option value="reverse">Rotación inversa</option>
+          </select>
         </div>
 
         <div class="panel-section controls">
@@ -41,7 +72,10 @@
             <li><kbd>↑</kbd> rotar</li>
             <li><kbd>↓</kbd> bajar</li>
             <li><kbd>Space</kbd> caída</li>
+            <li><kbd>C</kbd> reservar</li>
+            <li><kbd>E</kbd> habilidad</li>
             <li><kbd>P</kbd> pausa</li>
+            <li><kbd>M</kbd> silenciar</li>
           </ul>
         </div>
       </aside>
@@ -56,6 +90,15 @@
     </div>
   </div>
 
+  <script src="config.js"></script>
+  <script src="audio.js"></script>
+  <script src="fx.js"></script>
+  <script src="board.js"></script>
+  <script src="pieces.js"></script>
+  <script src="scoring.js"></script>
+  <script src="powerups.js"></script>
+  <script src="abilities.js"></script>
+  <script src="modes.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
