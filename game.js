@@ -7,6 +7,8 @@
 const themeToggleBtn = document.getElementById('theme-toggle');
 const muteBtn = document.getElementById('mute-toggle');
 const modeSelect = document.getElementById('mode-select');
+const infoToggleBtn = document.getElementById('info-toggle');
+const infoTooltip = document.getElementById('info-tooltip');
 
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
@@ -388,6 +390,16 @@ restartBtn.addEventListener('click', init);
 themeToggleBtn.addEventListener('click', toggleTheme);
 muteBtn.addEventListener('click', () => { Audio_.toggleMute(); updateMuteButton(); });
 if (modeSelect) modeSelect.addEventListener('change', init);
+
+infoToggleBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  infoTooltip.classList.toggle('hidden');
+});
+document.addEventListener('click', e => {
+  if (!infoTooltip.classList.contains('hidden') && !infoTooltip.contains(e.target) && e.target !== infoToggleBtn) {
+    infoTooltip.classList.add('hidden');
+  }
+});
 
 initTheme();
 updateMuteButton();
